@@ -1,8 +1,10 @@
 package com.github.smartheye.eth.tools;
 
 import java.io.BufferedOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -77,19 +79,37 @@ public class ListStaticNodes {
 				.setConnectionRequestTimeout(50000).build();
 	}
 
+	public static String getNetworkName(String networkId) {
+		if ("1".equals(networkId)) {
+			return "MainNet";
+		} else if ("4".equals(networkId)) {
+			return "Rinkeby";
+		}
+		return "MainNet";
+	}
+
 	public static void main(String[] args) {
+		// 1: MainNet, 4：Rinkeby
+		String networkId = "4";
+		String networkName = getNetworkName(networkId);
 		String country = ""; // China
 		ListStaticNodes staticNodes = new ListStaticNodes();
 		try {
-			List<ENode> eNodes = staticNodes.getAllStaticNodes(country);
+			List<ENode> eNodes = staticNodes.getAllStaticNodes(networkId, country);
 			List<ENodePingResult> eNodePingResult = pingEthNode.getAllResults();
 			String formatedENodeResultList = pingEthNode.formatEnodeResultList(eNodePingResult);
 			String formatedENodeJSON = staticNodes.formatEnodeResultList(eNodePingResult);
 
-			try (BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream("static-nodes.json"))) {
+			
+			if(!new File(networkName).exists()) {
+				new File(networkName).mkdirs();
+			}
+			try (BufferedOutputStream out = new BufferedOutputStream(
+					new FileOutputStream(networkName + "/static-nodes.json"))) {
 				out.write(formatedENodeJSON.getBytes("UTF-8"));
 			}
-			try (BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream("static-nodes.txt"))) {
+			try (BufferedOutputStream out = new BufferedOutputStream(
+					new FileOutputStream(networkName + "/static-nodes.txt"))) {
 				out.write(formatedENodeResultList.getBytes("UTF-8"));
 			}
 		} catch (IOException e) {
@@ -99,7 +119,7 @@ public class ListStaticNodes {
 		}
 	}
 
-	private String formatEnodeList(List<ENode> enodeList) {
+	private String formatEnodeList(List<ENode> enodeList) throws IOException {
 		JSONArray result = new JSONArray();
 		for (ENode node : enodeList) {
 			String enodeStr = node.getEnode();
@@ -108,7 +128,7 @@ public class ListStaticNodes {
 		return JSONObject.toJSONString(result, true);
 	}
 
-	private String formatEnodeResultList(List<ENodePingResult> enodeList) {
+	private String formatEnodeResultList(List<ENodePingResult> enodeList) throws IOException {
 		JSONArray result = new JSONArray();
 		List<ENode> newList = new ArrayList<ENode>();
 		List<ENode> timeoutList = new ArrayList<ENode>();
@@ -124,29 +144,31 @@ public class ListStaticNodes {
 		return formatEnodeList(newList);
 	}
 
-	public String getAndFormatENodes(String country) throws IOException {
-		List<ENode> eNodes = getAllStaticNodes(country);
+	public String getAndFormatENodes(String networkId, String country) throws IOException {
+		List<ENode> eNodes = getAllStaticNodes(networkId, country);
 
 		return formatEnodeList(eNodes);
 	}
 
-	public List<ENode> getAllStaticNodes(String country) throws IOException {
+	public List<ENode> getAllStaticNodes(String networkId, String country) throws IOException {
 		List<ENode> totalNodes = new ArrayList<ENode>();
 		HttpClientBuilder httpClientBuilder = getHttpClientBuilder();
 
 		try (CloseableHttpClient httpClient = httpClientBuilder.build()) {
-			JSONObject firstPage = getSingleNodeStates(httpClient, country, 0, PAGE_ITEM_SIZE);
+			JSONObject firstPage = getSingleNodeStates(httpClient, networkId, country, 0, PAGE_ITEM_SIZE);
 			// int recordTotal = firstPage.getInteger("recordsTotal");
 			int recordsFiltered = firstPage.getInteger("recordsFiltered");
 			addNodes(totalNodes, firstPage);
 			if (recordsFiltered > PAGE_ITEM_SIZE) {
 				int totalPage = recordsFiltered % PAGE_ITEM_SIZE == 0 ? recordsFiltered / PAGE_ITEM_SIZE
 						: (recordsFiltered / PAGE_ITEM_SIZE + 1);
-				System.out.println("totalRecords="+recordsFiltered+", pages="+totalPage);
+				System.out.println("totalRecords=" + recordsFiltered + ", pages=" + totalPage);
 				for (int i = 1; i < totalPage; i++) {
 					System.out.println("getting page " + i);
-					JSONObject page = getSingleNodeStates(httpClient, country, i, PAGE_ITEM_SIZE);
-					addNodes(totalNodes, page);
+					JSONObject page = getSingleNodeStates(httpClient, networkId, country, i, PAGE_ITEM_SIZE);
+					if (page != null) {
+						addNodes(totalNodes, page);
+					}
 				}
 			}
 		} catch (IOException e) {
@@ -168,9 +190,9 @@ public class ListStaticNodes {
 		pingEthNode.pingNodes(eNodeList);
 	}
 
-	public JSONObject getSingleNodeStates(CloseableHttpClient httpClient, String country, int start, int length)
-			throws IOException {
-		String url = getUrl(country, start, length);
+	public JSONObject getSingleNodeStates(CloseableHttpClient httpClient, String networkId, String country, int start,
+			int length) throws IOException {
+		String url = getUrl(networkId, country, start, length);
 		HttpGet httpGet = new HttpGet(url);
 		httpGet.setConfig(getRequestConfig());
 		try (CloseableHttpResponse result = httpClient.execute(httpGet)) {
@@ -180,9 +202,14 @@ public class ListStaticNodes {
 			} else {
 				throw new IOException("Error On Read URL " + url);
 			}
+		} catch (SocketTimeoutException e) {
+			e.printStackTrace();
+			//throw e;
+			return null;
 		} catch (IOException e) {
 			e.printStackTrace();
-			throw e;
+			//throw e;
+			return null;
 		}
 	}
 
@@ -203,8 +230,10 @@ public class ListStaticNodes {
 		//return RequestConfig.custom().setSocketTimeout(2000).setConnectTimeout(2000).setProxy(proxy).build();
 	}
 
-	private String getUrl(String country, int start, int length) {
-		return "https://www.ethernodes.org/network/1/data?draw=1&columns[0][data]=id&columns[0][name]=&columns[0][searchable]=true&columns[0][orderable]=true&columns[0][search][value]=&columns[0][search][regex]=false&columns[1][data]=host&columns[1][name]=&columns[1][searchable]=true&columns[1][orderable]=true&columns[1][search][value]=&columns[1][search][regex]=false&columns[2][data]=port&columns[2][name]=&columns[2][searchable]=true&columns[2][orderable]=true&columns[2][search][value]=&columns[2][search][regex]=false&columns[3][data]=country&columns[3][name]=&columns[3][searchable]=true&columns[3][orderable]=true&columns[3][search][value]=&columns[3][search][regex]=false&columns[4][data]=clientId&columns[4][name]=&columns[4][searchable]=true&columns[4][orderable]=true&columns[4][search][value]=&columns[4][search][regex]=false&columns[5][data]=client&columns[5][name]=&columns[5][searchable]=true&columns[5][orderable]=true&columns[5][search][value]=&columns[5][search][regex]=false&columns[6][data]=clientVersion&columns[6][name]=&columns[6][searchable]=true&columns[6][orderable]=true&columns[6][search][value]=&columns[6][search][regex]=false&columns[7][data]=os&columns[7][name]=&columns[7][searchable]=true&columns[7][orderable]=true&columns[7][search][value]=&columns[7][search][regex]=false&columns[8][data]=lastUpdate&columns[8][name]=&columns[8][searchable]=true&columns[8][orderable]=true&columns[8][search][value]=&columns[8][search][regex]=false&order[0][column]=3&order[0][dir]=asc&start="
-				+ start*PAGE_ITEM_SIZE + "&length=" + length + "&search[value]=" + country + "&search[regex]=false&=1538707169908";
+	private String getUrl(String networkId, String country, int start, int length) {
+		return "https://www.ethernodes.org/network/" + networkId
+				+ "/data?draw=1&columns[0][data]=id&columns[0][name]=&columns[0][searchable]=true&columns[0][orderable]=true&columns[0][search][value]=&columns[0][search][regex]=false&columns[1][data]=host&columns[1][name]=&columns[1][searchable]=true&columns[1][orderable]=true&columns[1][search][value]=&columns[1][search][regex]=false&columns[2][data]=port&columns[2][name]=&columns[2][searchable]=true&columns[2][orderable]=true&columns[2][search][value]=&columns[2][search][regex]=false&columns[3][data]=country&columns[3][name]=&columns[3][searchable]=true&columns[3][orderable]=true&columns[3][search][value]=&columns[3][search][regex]=false&columns[4][data]=clientId&columns[4][name]=&columns[4][searchable]=true&columns[4][orderable]=true&columns[4][search][value]=&columns[4][search][regex]=false&columns[5][data]=client&columns[5][name]=&columns[5][searchable]=true&columns[5][orderable]=true&columns[5][search][value]=&columns[5][search][regex]=false&columns[6][data]=clientVersion&columns[6][name]=&columns[6][searchable]=true&columns[6][orderable]=true&columns[6][search][value]=&columns[6][search][regex]=false&columns[7][data]=os&columns[7][name]=&columns[7][searchable]=true&columns[7][orderable]=true&columns[7][search][value]=&columns[7][search][regex]=false&columns[8][data]=lastUpdate&columns[8][name]=&columns[8][searchable]=true&columns[8][orderable]=true&columns[8][search][value]=&columns[8][search][regex]=false&order[0][column]=3&order[0][dir]=asc&start="
+				+ start * PAGE_ITEM_SIZE + "&length=" + length + "&search[value]=" + country
+				+ "&search[regex]=false&=1538707169908";
 	}
 }

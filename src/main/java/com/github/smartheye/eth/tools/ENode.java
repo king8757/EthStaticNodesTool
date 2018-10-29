@@ -1,6 +1,9 @@
 package com.github.smartheye.eth.tools;
 
+import java.io.IOException;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class ENode implements Serializable{
 
@@ -11,6 +14,7 @@ public class ENode implements Serializable{
 	private int port;
 	private String lastUpdate;
 	private String host;
+	private String hostIp;
 	private String client;
 	private String id;
 	private String clientVersion;
@@ -91,8 +95,13 @@ public class ENode implements Serializable{
 		this.clientVersion = clientVersion;
 	}
 	
-	public String getEnode() {
-		return "enode://" + id + "@" + host + ":" + port;
+	public String getEnode() throws IOException {
+		if(host.matches("[\\d\\.]+")){
+			return "enode://" + id + "@" + host + ":" + port;
+		}else {
+			InetAddress address = InetAddress.getByName(host);
+			return "enode://" + id + "@" + address.getHostAddress() + ":" + port;
+		}
 	}
 
 	@Override

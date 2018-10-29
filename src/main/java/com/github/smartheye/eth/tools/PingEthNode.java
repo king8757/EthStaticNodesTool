@@ -117,7 +117,7 @@ public class PingEthNode {
 		return enodeResultList;
 	}
 
-	public String formatEnodeResultList(List<ENodePingResult> enodeResultList) {
+	public String formatEnodeResultList(List<ENodePingResult> enodeResultList) throws IOException {
 		List<ENodePingResult> timeoutNodes = new ArrayList<ENodePingResult>();
 		List<ENodePingResult> newNodes = new ArrayList<ENodePingResult>();
 		for(ENodePingResult enode:enodeResultList) {
@@ -131,7 +131,7 @@ public class PingEthNode {
 		return internalFormatEnodeResultList(newNodes);
 	}
 	
-	public String internalFormatEnodeResultList(List<ENodePingResult> enodeResultList) {
+	public String internalFormatEnodeResultList(List<ENodePingResult> enodeResultList) throws IOException {
 		StringBuffer sbf = new StringBuffer();
 		for (ENodePingResult result : enodeResultList) {
 			long pingTime = result.getPingTime();
