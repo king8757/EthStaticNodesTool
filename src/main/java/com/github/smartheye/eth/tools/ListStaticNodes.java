@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -90,7 +91,7 @@ public class ListStaticNodes {
 
 	public static void main(String[] args) {
 		// 1: MainNet, 4：Rinkeby
-		String networkId = "4";
+		String networkId = "1";
 		String networkName = getNetworkName(networkId);
 		String country = ""; // China
 		ListStaticNodes staticNodes = new ListStaticNodes();
@@ -100,7 +101,6 @@ public class ListStaticNodes {
 			String formatedENodeResultList = pingEthNode.formatEnodeResultList(eNodePingResult);
 			String formatedENodeJSON = staticNodes.formatEnodeResultList(eNodePingResult);
 
-			
 			if(!new File(networkName).exists()) {
 				new File(networkName).mkdirs();
 			}
@@ -122,8 +122,12 @@ public class ListStaticNodes {
 	private String formatEnodeList(List<ENode> enodeList) throws IOException {
 		JSONArray result = new JSONArray();
 		for (ENode node : enodeList) {
-			String enodeStr = node.getEnode();
-			result.add(enodeStr);
+			try {
+				String enodeStr = node.getEnode();
+				result.add(enodeStr);
+			}catch(UnknownHostException e) {
+				// do nothing
+			}
 		}
 		return JSONObject.toJSONString(result, true);
 	}

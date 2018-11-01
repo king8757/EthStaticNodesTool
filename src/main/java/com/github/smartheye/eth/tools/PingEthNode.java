@@ -2,6 +2,7 @@ package com.github.smartheye.eth.tools;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -117,7 +118,7 @@ public class PingEthNode {
 		return enodeResultList;
 	}
 
-	public String formatEnodeResultList(List<ENodePingResult> enodeResultList) throws IOException {
+	public String formatEnodeResultList(List<ENodePingResult> enodeResultList) {
 		List<ENodePingResult> timeoutNodes = new ArrayList<ENodePingResult>();
 		List<ENodePingResult> newNodes = new ArrayList<ENodePingResult>();
 		for(ENodePingResult enode:enodeResultList) {
@@ -131,7 +132,7 @@ public class PingEthNode {
 		return internalFormatEnodeResultList(newNodes);
 	}
 	
-	public String internalFormatEnodeResultList(List<ENodePingResult> enodeResultList) throws IOException {
+	public String internalFormatEnodeResultList(List<ENodePingResult> enodeResultList) {
 		StringBuffer sbf = new StringBuffer();
 		for (ENodePingResult result : enodeResultList) {
 			long pingTime = result.getPingTime();
@@ -139,7 +140,13 @@ public class PingEthNode {
 			if (pingTime > 0) {
 				pingStr = pingTime + "ms";
 			}
-			sbf.append(result.getEnode().getEnode()).append("  // ").append(pingStr).append(System.getProperty("line.separator"));
+			try {
+				sbf.append(result.getEnode().getEnode()).append("  // ").append(pingStr).append(System.getProperty("line.separator"));
+			}catch(UnknownHostException e) {
+				// do nothing
+			}catch(IOException e) {
+				e.printStackTrace();
+			}
 		}
 		return sbf.toString();
 	}
